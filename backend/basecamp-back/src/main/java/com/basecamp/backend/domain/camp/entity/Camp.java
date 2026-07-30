@@ -89,7 +89,7 @@ public class Camp {
    * #firstImageUrl} 만 채워진다.
    *
    * <p>게시글/리뷰와 같은 구조다 — 공용 저장소(images)와 중간 테이블(camp_images)을 {@code @OrderColumn} 으로 이어 첨부 순서를
-   * 보존한다.
+   * 보존한다
    */
   @Builder.Default
   @ManyToMany(cascade = CascadeType.PERSIST)
