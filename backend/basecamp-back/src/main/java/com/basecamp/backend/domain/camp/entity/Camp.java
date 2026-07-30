@@ -109,9 +109,6 @@ public class Camp {
   @Column(name = "homepage", length = 255)
   private String homepage;
 
-  @Column(name = "doNm", length = 50)
-  private String doNm;
-
   @Column(name = "sbrsCl", length = 500)
   private String sbrsCl;
 
