@@ -28,15 +28,7 @@ public class CampResponseDto {
   private Integer autoSiteCo;
   private Integer glampSiteCo;
   private String firstImageUrl;
-
-  /**
-   * 캠핑장 이미지 전체(갤러리). 상세 조회에서만 채워지고, 목록 조회에서는 {@code null} 이다.
-   *
-   * <p>목록은 캠핑장마다 이미지를 끌고 오면 N+1 이 되고 대표 한 장이면 충분하므로 {@link #firstImageUrl} 만 내려간다. 직접 등록하지 않은(고캠핑)
-   * 캠핑장은 상세에서도 빈 목록이다 — 이미지가 제공자 서버에 있어 우리 저장소에 올린 것이 없기 때문이다.
-   */
   private List<String> imageUrls;
-
   private String manageSttus;
   private Integer price;
   private BigDecimal averageRating;
