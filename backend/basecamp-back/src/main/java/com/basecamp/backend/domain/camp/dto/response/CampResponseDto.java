@@ -44,7 +44,6 @@ public class CampResponseDto {
   private LocalDateTime createdAt;
   private String lineIntro;
   private String homepage;
-  private String doNm;
   private List<String> facilities;
   private Integer toiletCo;
   private Integer swrmCo;
@@ -97,7 +96,6 @@ public class CampResponseDto {
         .createdAt(camp.getCreatedAt())
         .lineIntro(camp.getLineIntro())
         .homepage(camp.getHomepage())
-        .doNm(camp.getDoNm())
         .facilities(splitCsv(camp.getSbrsCl()))
         .toiletCo(camp.getToiletCo())
         .swrmCo(camp.getSwrmCo())
