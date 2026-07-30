@@ -11,6 +11,7 @@ import com.basecamp.backend.domain.camp.dto.request.CampRegistrationRequest;
 import com.basecamp.backend.domain.camp.dto.request.CampUpdateRequest;
 import com.basecamp.backend.domain.camp.dto.request.GocampingApiResponseDto;
 import com.basecamp.backend.domain.camp.dto.response.CampResponseDto;
+import com.basecamp.backend.domain.camp.dto.response.GocampingSyncStatusResponseDto;
 import com.basecamp.backend.domain.camp.entity.Camp;
 import com.basecamp.backend.domain.camp.entity.CampManageStatus;
 import com.basecamp.backend.domain.camp.repository.CampRepository;
@@ -20,9 +21,13 @@ import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +38,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -73,6 +79,13 @@ public class CampService {
   @Value("${camp.default-price.unit}")
   private int defaultPriceUnit;
 
+  // fetchAndSaveCampsFromGocampingApi() 는 @Async 로 별도 스레드에서 실행된다.
+  // 아래 세 필드는 그 실행 상태를 관리자가 조회/취소할 수 있게 하는 최소한의 공유 상태다.
+  private final AtomicBoolean isSyncRunning = new AtomicBoolean(false);
+  private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
+  private final AtomicReference<GocampingSyncStatusResponseDto> syncStatus =
+      new AtomicReference<>(GocampingSyncStatusResponseDto.idle());
+
   // camp.default-price.* 설정이 잘못되면(min > max, unit <= 0) generateRandomPrice()가 나중에
   // ArithmeticException/IllegalArgumentException으로 조용히 실패하므로, 앱 시작 시점에 미리 검증한다.
   @PostConstruct
@@ -87,29 +100,28 @@ public class CampService {
   }
 
   // 고캠핑 API 에서 받은 캠핑장 데이터 DB 저장
-  // 반환값은 "실제로 새로 저장한 건수". 받은 개수(apiCamps.size())와 다르다 —
-  // 이미 있는 contentId 와 대표 이미지가 없는 항목은 걸러지기 때문.
-  @Transactional
-  public int saveCampsFromApi(List<GocampingApiResponseDto> apiCamps) {
-    // API 에서 받은 데이터가 없다면 ? 메서드 종료
+  public int saveCampsFromApi(
+      List<GocampingApiResponseDto> apiCamps, Set<Long> existingContentIds) {
     if (apiCamps == null || apiCamps.isEmpty()) {
       return 0;
     }
-    // DB 에 이미 저장이 된 contentId를 모두 가져오기
-    Set<Long> existingContentIds =
-        campRepository.findAllContentIds().stream().collect(Collectors.toSet());
 
-    // 새로운 데이터만 필터링 하고 Entity로 변환 하기
     List<Camp> newCamps =
         apiCamps.stream()
             .filter(dto -> !existingContentIds.contains(dto.getContentId()))
             .filter(dto -> StringUtils.hasText(dto.getFirstImageUrl()))
             .map(dto -> Camp.fromGocampingApi(dto, generateRandomPrice()))
             .collect(Collectors.toList());
-    // 새로운 데이터 DB 저장 로직
-    if (!newCamps.isEmpty()) {
-      campRepository.saveAll(newCamps);
+
+    if (newCamps.isEmpty()) {
+      return 0;
     }
+
+    campTransactionService.saveAllNewCamps(newCamps);
+
+    // 저장분을 캐시에 반영 — 이후 페이지에 같은 contentId 가 와도 걸러진다
+    newCamps.forEach(camp -> existingContentIds.add(camp.getContentId()));
+
     return newCamps.size();
   }
 
@@ -120,21 +132,36 @@ public class CampService {
     return defaultPriceMin + ThreadLocalRandom.current().nextInt(steps) * defaultPriceUnit;
   }
 
-  /**
-   * 고캠핑 공공데이터 API에서 캠핑장 데이터를 받아와서 DB에 저장
-   *
-   * <p>순서: 1. 고캠핑 API에 요청 (RestTemplate 사용) 2. 응답 받음 (JSON) 3. saveCampsFromApi()를 호출해서 DB에 저장
-   */
-  @Transactional
-  public void fetchAndSaveCampsFromGocampingApi() {
+  // 고캠핑 공공데이터 API에서 캠핑장 데이터를 받아와서 DB에 저장
+  // 관리자가 /fetch 로 수동 트리거하면 오래 걸리는 전체 동기화 동안 요청 스레드를 막지 않도록 별도 스레드에서 실행한다.
+  // 진행 상태는 getSyncStatus() 로, 취소는 requestCancelSync() 로 다룬다.
+  @Async
+  public CompletableFuture<Void> fetchAndSaveCampsFromGocampingApi() {
+    if (!isSyncRunning.compareAndSet(false, true)) {
+      log.warn("이미 동기화가 진행 중이라 새 요청을 무시합니다.");
+      return CompletableFuture.completedFuture(null);
+    }
+    cancelRequested.set(false);
+    syncStatus.set(GocampingSyncStatusResponseDto.running());
+
+    int totalReceived = 0;
+    int totalSaved = 0;
     try {
       int pageNo = 1;
       int numOfRows = 100;
       boolean hasMoreData = true;
-      int totalReceived = 0;
-      int totalSaved = 0;
+
+      // 기존 contentId 는 루프 시작 전 1회만 조회하고, 이후에는 메모리 캐시로 중복을 거른다.
+      Set<Long> existingContentIds = new HashSet<>(campRepository.findAllContentIds());
+      log.info("기존 캠핑장 contentId {}건 로드", existingContentIds.size());
 
       while (hasMoreData) {
+        if (cancelRequested.get()) {
+          log.info("사용자 요청으로 동기화를 취소합니다. (수신 {}건, 저장 {}건까지 진행)", totalReceived, totalSaved);
+          syncStatus.set(GocampingSyncStatusResponseDto.cancelled(totalReceived, totalSaved));
+          return CompletableFuture.completedFuture(null);
+        }
+
         String url =
             gocampingApiUrl
                 + "?serviceKey="
@@ -145,27 +172,18 @@ public class CampService {
                 + pageNo
                 + "&MobileOS=ETC&MobileApp=basecamp&_type=json";
 
+        long apiStart = System.currentTimeMillis();
         log.info("고캠핑 API 호출 중... (페이지: {})", pageNo);
 
         ResponseEntity<GocampingApiResponse> response =
             restTemplate.getForEntity(url, GocampingApiResponse.class);
+        long apiElapsed = System.currentTimeMillis() - apiStart;
 
         if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
           ResponseBody responseBody = response.getBody().getResponse();
           Body body = responseBody != null ? responseBody.getBody() : null;
           Items items = body != null ? body.getItems() : null;
           List<GocampingApiResponseDto> camps = items != null ? items.getItem() : null;
-
-          log.debug(
-              "고캠핑 API 응답 - 페이지: {}, 받은 캠핑장 개수: {}", pageNo, camps != null ? camps.size() : 0);
-          if (camps != null && !camps.isEmpty()) {
-            GocampingApiResponseDto firstCamp = camps.get(0);
-            log.debug(
-                "첫 번째 캠핑장 - contentId: {}, facltNm: {}, addr1: {}",
-                firstCamp.getContentId(),
-                firstCamp.getFacltNm(),
-                firstCamp.getAddr1());
-          }
 
           if (camps == null || camps.isEmpty()) {
             log.info("모든 페이지를 받았습니다");
@@ -175,11 +193,20 @@ public class CampService {
             // 페이지네이션 종료 판단은 반드시 receivedCount 로 해야 한다 —
             // savedCount 로 하면 전부 중복인 페이지에서 0건이 나와 조기 종료된다.
             int receivedCount = camps.size();
-            int savedCount = saveCampsFromApi(camps);
+
+            long saveStart = System.currentTimeMillis();
+            int savedCount = saveCampsFromApi(camps, existingContentIds);
+            long saveElapsed = System.currentTimeMillis() - saveStart;
 
             totalReceived += receivedCount;
             totalSaved += savedCount;
-            log.info("페이지 {}: {}건 수신, {}건 신규 저장", pageNo, receivedCount, savedCount);
+            log.info(
+                "페이지 {}: {}건 수신, {}건 신규 저장 (API {}ms, 저장 {}ms)",
+                pageNo,
+                receivedCount,
+                savedCount,
+                apiElapsed,
+                saveElapsed);
 
             if (receivedCount < numOfRows) {
               log.info("마지막 페이지입니다");
@@ -199,12 +226,34 @@ public class CampService {
           totalSaved,
           totalReceived - totalSaved);
 
+      syncStatus.set(GocampingSyncStatusResponseDto.done(totalReceived, totalSaved));
+      return CompletableFuture.completedFuture(null);
     } catch (BusinessException e) {
+      syncStatus.set(GocampingSyncStatusResponseDto.failed(e.getMessage()));
       throw e;
     } catch (RestClientException e) {
       log.error("고캠핑 API 호출 실패: {}", e.getClass().getSimpleName());
-      throw new BusinessException(ErrorCode.GOCAMPING_SERVER_ERROR, "고캠핑 API 호출 중 오류가 발생했습니다");
+      BusinessException businessException =
+          new BusinessException(ErrorCode.GOCAMPING_SERVER_ERROR, "고캠핑 API 호출 중 오류가 발생했습니다");
+      syncStatus.set(GocampingSyncStatusResponseDto.failed(businessException.getMessage()));
+      throw businessException;
+    } finally {
+      isSyncRunning.set(false);
     }
+  }
+
+  /** 진행 중인 동기화가 있으면 취소 플래그를 세운다. 취소 대상이 없으면 false. */
+  public boolean requestCancelSync() {
+    if (!isSyncRunning.get()) {
+      return false;
+    }
+    cancelRequested.set(true);
+    return true;
+  }
+
+  /** 가장 최근(또는 현재 진행 중인) 동기화의 상태 스냅샷. */
+  public GocampingSyncStatusResponseDto getSyncStatus() {
+    return syncStatus.get();
   }
 
   // 특정 캠핑장 ID 조회 (Read). 없으면 CAMP_NOT_FOUND.

@@ -5,7 +5,6 @@ import com.basecamp.backend.common.exception.ErrorCode;
 import com.basecamp.backend.common.model.AuthUser;
 import com.basecamp.backend.domain.camp.dto.request.CampRegistrationRequest;
 import com.basecamp.backend.domain.camp.dto.request.CampUpdateRequest;
-import com.basecamp.backend.domain.camp.dto.request.GocampingApiResponseDto;
 import com.basecamp.backend.domain.camp.dto.response.*;
 import com.basecamp.backend.domain.camp.entity.Camp;
 import com.basecamp.backend.domain.camp.service.CampService;
@@ -37,27 +36,34 @@ public class CampController {
   private final GenericResponseService responseBuilder;
   private final WeatherService weatherService;
 
-  // 고캠핑 API에서 캠핑장 데이터를 동기화
-  @Operation(summary = "고캠핑 API 데이터 동기화", description = "관리자가 전달한 고캠핑 API 캠핑장 목록을 DB에 동기화합니다.")
-  @PreAuthorize("hasRole('ADMIN')")
-  @PostMapping("/sync")
-  public ResponseEntity<String> syncCamps(
-      @Valid @RequestBody List<@Valid GocampingApiResponseDto> apiCamps) {
-    campService.saveCampsFromApi(apiCamps);
-    return ResponseEntity.ok("캠핑장 데이터가 성공적으로 동기화되었습니다");
-  }
-
   // 고캠핑 API 전체를 직접 호출해서 DB에 저장 (관리자용 수동 트리거)
-  // 경로가 /api/v1/admin 아래가 아니라 SecurityConfig 의 URL 규칙으로는 묶이지 않는다.
-  // 메서드 하나에만 걸리는 규칙이므로 @PreAuthorize 로 보호한다.
+  // 별도 스레드에서 비동기로 실행되므로 이 요청은 즉시 리턴된다. 진행 상황은 /fetch/status 로 확인한다.
   @Operation(
       summary = "고캠핑 API 전체 동기화",
-      description = "관리자가 고캠핑 공공데이터 API를 직접 호출해 전체 캠핑장 데이터를 동기화합니다.")
+      description =
+          "관리자가 고캠핑 공공데이터 API를 직접 호출해 전체 캠핑장 데이터를 동기화합니다. 비동기로 실행되며, 진행 상황은 /fetch/status 로 조회합니다.")
   @PreAuthorize("hasRole('ADMIN')")
   @PostMapping("/fetch")
   public ResponseEntity<String> fetchCamps() {
     campService.fetchAndSaveCampsFromGocampingApi();
-    return ResponseEntity.ok("고캠핑 API 전체 데이터가 성공적으로 동기화되었습니다");
+    return ResponseEntity.ok("고캠핑 API 동기화를 시작했습니다. /fetch/status 에서 진행 상황을 확인하세요");
+  }
+
+  // 고캠핑 API 동기화 진행 상태 조회
+  @Operation(summary = "고캠핑 API 동기화 상태 조회", description = "/fetch 로 트리거한 동기화의 현재 진행 상태를 조회합니다.")
+  @PreAuthorize("hasRole('ADMIN')")
+  @GetMapping("/fetch/status")
+  public ResponseEntity<GocampingSyncStatusResponseDto> getFetchStatus() {
+    return ResponseEntity.ok(campService.getSyncStatus());
+  }
+
+  // 진행 중인 고캠핑 API 동기화 취소
+  @Operation(summary = "고캠핑 API 동기화 취소", description = "진행 중인 동기화가 있으면 취소를 요청합니다.")
+  @PreAuthorize("hasRole('ADMIN')")
+  @PostMapping("/fetch/cancel")
+  public ResponseEntity<String> cancelFetch() {
+    boolean cancelled = campService.requestCancelSync();
+    return ResponseEntity.ok(cancelled ? "취소를 요청했습니다" : "진행 중인 동기화가 없습니다");
   }
 
   // 특정 캠핑장 ID(PK) 로 조회 (상세페이지용 - 자체 등록 캠핑장은 contentId가 없어 이 엔드포인트로 통일 조회)

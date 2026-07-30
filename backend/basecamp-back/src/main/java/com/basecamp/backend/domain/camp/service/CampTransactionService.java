@@ -101,6 +101,11 @@ public class CampTransactionService {
     return objectKeysOf(detached);
   }
 
+  @Transactional
+  public void saveAllNewCamps(List<Camp> newCamps) {
+    campRepository.saveAll(newCamps);
+  }
+
   /** 이미지까지 로딩해 소유권을 확인한다. 교체 대상을 인스턴스로 되짚어야 하므로 컬렉션이 초기화돼 있어야 한다. */
   private Camp loadOwned(Long campId, Long ownerId) {
     Camp camp =
