@@ -99,31 +99,48 @@ public class CampService {
     }
   }
 
-  // 고캠핑 API 에서 받은 캠핑장 데이터 DB 저장
-  public int saveCampsFromApi(
+  // 고캠핑 API 에서 받은 캠핑장 데이터를 신규 저장/기존 갱신으로 나눠 DB에 반영한다 (upsert).
+  // 신규는 그대로 insert, 이미 존재하는(contentId 매칭) 캠핑장은 API 원본 필드만 최신화한다 —
+  // price/ownerId/images/averageRating/reservationCount 처럼 우리 도메인이 소유한 값은 여기서 건드리지 않는다.
+  public SyncPageResult saveCampsFromApi(
       List<GocampingApiResponseDto> apiCamps, Set<Long> existingContentIds) {
     if (apiCamps == null || apiCamps.isEmpty()) {
-      return 0;
+      return new SyncPageResult(0, 0);
+    }
+
+    // 대표 이미지가 없는 레코드는 신규 저장도, 기존 데이터 갱신도 하지 않는다 —
+    // 이미 저장된 좋은 데이터를 대표 이미지 없는 값으로 덮어쓰지 않기 위해서다.
+    List<GocampingApiResponseDto> validCamps =
+        apiCamps.stream().filter(dto -> StringUtils.hasText(dto.getFirstImageUrl())).toList();
+
+    List<GocampingApiResponseDto> newDtos =
+        validCamps.stream()
+            .filter(dto -> !existingContentIds.contains(dto.getContentId()))
+            .toList();
+    List<GocampingApiResponseDto> existingDtos =
+        validCamps.stream().filter(dto -> existingContentIds.contains(dto.getContentId())).toList();
+
+    int updatedCount = campTransactionService.syncExistingCamps(existingDtos);
+
+    if (newDtos.isEmpty()) {
+      return new SyncPageResult(0, updatedCount);
     }
 
     List<Camp> newCamps =
-        apiCamps.stream()
-            .filter(dto -> !existingContentIds.contains(dto.getContentId()))
-            .filter(dto -> StringUtils.hasText(dto.getFirstImageUrl()))
+        newDtos.stream()
             .map(dto -> Camp.fromGocampingApi(dto, generateRandomPrice()))
             .collect(Collectors.toList());
-
-    if (newCamps.isEmpty()) {
-      return 0;
-    }
 
     campTransactionService.saveAllNewCamps(newCamps);
 
     // 저장분을 캐시에 반영 — 이후 페이지에 같은 contentId 가 와도 걸러진다
     newCamps.forEach(camp -> existingContentIds.add(camp.getContentId()));
 
-    return newCamps.size();
+    return new SyncPageResult(newCamps.size(), updatedCount);
   }
+
+  /** 한 페이지 처리 결과: 신규 저장 건수와 기존 갱신 건수. */
+  public record SyncPageResult(int savedCount, int updatedCount) {}
 
   // 고캠핑 API 가격 설정
   // 없는 가격 정보를 대체하기 위해 설정된 범위 내에서 unit 단위로 임의 가격을 생성한다.
@@ -146,6 +163,7 @@ public class CampService {
 
     int totalReceived = 0;
     int totalSaved = 0;
+    int totalUpdated = 0;
     try {
       int pageNo = 1;
       int numOfRows = 100;
@@ -157,8 +175,13 @@ public class CampService {
 
       while (hasMoreData) {
         if (cancelRequested.get()) {
-          log.info("사용자 요청으로 동기화를 취소합니다. (수신 {}건, 저장 {}건까지 진행)", totalReceived, totalSaved);
-          syncStatus.set(GocampingSyncStatusResponseDto.cancelled(totalReceived, totalSaved));
+          log.info(
+              "사용자 요청으로 동기화를 취소합니다. (수신 {}건, 저장 {}건, 갱신 {}건까지 진행)",
+              totalReceived,
+              totalSaved,
+              totalUpdated);
+          syncStatus.set(
+              GocampingSyncStatusResponseDto.cancelled(totalReceived, totalSaved, totalUpdated));
           return CompletableFuture.completedFuture(null);
         }
 
@@ -195,16 +218,18 @@ public class CampService {
             int receivedCount = camps.size();
 
             long saveStart = System.currentTimeMillis();
-            int savedCount = saveCampsFromApi(camps, existingContentIds);
+            SyncPageResult pageResult = saveCampsFromApi(camps, existingContentIds);
             long saveElapsed = System.currentTimeMillis() - saveStart;
 
             totalReceived += receivedCount;
-            totalSaved += savedCount;
+            totalSaved += pageResult.savedCount();
+            totalUpdated += pageResult.updatedCount();
             log.info(
-                "페이지 {}: {}건 수신, {}건 신규 저장 (API {}ms, 저장 {}ms)",
+                "페이지 {}: {}건 수신, {}건 신규 저장, {}건 갱신 (API {}ms, 저장 {}ms)",
                 pageNo,
                 receivedCount,
-                savedCount,
+                pageResult.savedCount(),
+                pageResult.updatedCount(),
                 apiElapsed,
                 saveElapsed);
 
@@ -221,12 +246,13 @@ public class CampService {
       }
 
       log.info(
-          "총 {}건 수신, {}개의 캠핑장이 새로 저장되었습니다 (중복/대표이미지 없음 {}건 제외)",
+          "총 {}건 수신, {}개 신규 저장, {}개 갱신 (미변경/대표이미지 없음 {}건 제외)",
           totalReceived,
           totalSaved,
-          totalReceived - totalSaved);
+          totalUpdated,
+          totalReceived - totalSaved - totalUpdated);
 
-      syncStatus.set(GocampingSyncStatusResponseDto.done(totalReceived, totalSaved));
+      syncStatus.set(GocampingSyncStatusResponseDto.done(totalReceived, totalSaved, totalUpdated));
       return CompletableFuture.completedFuture(null);
     } catch (BusinessException e) {
       syncStatus.set(GocampingSyncStatusResponseDto.failed(e.getMessage()));

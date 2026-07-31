@@ -19,6 +19,7 @@ public class GocampingSyncStatusResponseDto {
   private Status status;
   private int totalReceived;
   private int totalSaved;
+  private int totalUpdated;
   private String message;
 
   public static GocampingSyncStatusResponseDto idle() {
@@ -35,21 +36,29 @@ public class GocampingSyncStatusResponseDto {
         .build();
   }
 
-  public static GocampingSyncStatusResponseDto done(int totalReceived, int totalSaved) {
+  public static GocampingSyncStatusResponseDto done(
+      int totalReceived, int totalSaved, int totalUpdated) {
     return GocampingSyncStatusResponseDto.builder()
         .status(Status.DONE)
         .totalReceived(totalReceived)
         .totalSaved(totalSaved)
-        .message(String.format("총 %d건 수신, %d건 신규 저장 완료", totalReceived, totalSaved))
+        .totalUpdated(totalUpdated)
+        .message(
+            String.format(
+                "총 %d건 수신, %d건 신규 저장, %d건 갱신 완료", totalReceived, totalSaved, totalUpdated))
         .build();
   }
 
-  public static GocampingSyncStatusResponseDto cancelled(int totalReceived, int totalSaved) {
+  public static GocampingSyncStatusResponseDto cancelled(
+      int totalReceived, int totalSaved, int totalUpdated) {
     return GocampingSyncStatusResponseDto.builder()
         .status(Status.CANCELLED)
         .totalReceived(totalReceived)
         .totalSaved(totalSaved)
-        .message(String.format("취소되었습니다 (수신 %d건, 저장 %d건까지 진행)", totalReceived, totalSaved))
+        .totalUpdated(totalUpdated)
+        .message(
+            String.format(
+                "취소되었습니다 (수신 %d건, 저장 %d건, 갱신 %d건까지 진행)", totalReceived, totalSaved, totalUpdated))
         .build();
   }
 

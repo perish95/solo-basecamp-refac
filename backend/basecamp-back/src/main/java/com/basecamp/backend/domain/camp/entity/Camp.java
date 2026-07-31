@@ -281,6 +281,32 @@ public class Camp {
         .build();
   }
 
+  /**
+   * 이미 존재하는 캠핑장(contentId 매칭)에 고캠핑 API 응답을 다시 반영한다.
+   *
+   * <p>API가 실제로 원본을 갖고 있는 필드만 덮어쓴다. {@code price}(API 미제공, 저장 시점에 임의 부여), {@code
+   * averageRating}/{@code reservationCount}(리뷰·예약 도메인이 집계), {@code ownerId}/{@link #images}(사용자
+   * 등록·수정 경로로만 채워짐)는 API 쪽에 대응 값이 없거나 우리 도메인이 소유한 값이라 여기서 손대지 않는다.
+   */
+  public void syncFromGocampingApi(
+      com.basecamp.backend.domain.camp.dto.request.GocampingApiResponseDto dto) {
+    this.facltNm = dto.getFacltNm();
+    this.addr1 = dto.getAddr1();
+    this.mapX = dto.getMapX() != null ? new BigDecimal(dto.getMapX().toString()) : null;
+    this.mapY = dto.getMapY() != null ? new BigDecimal(dto.getMapY().toString()) : null;
+    this.tel = dto.getTel();
+    this.induty = dto.getInduty();
+    this.gnrlSiteCo = dto.getGnrlSiteCo();
+    this.autoSiteCo = dto.getAutoSiteCo();
+    this.glampSiteCo = dto.getGlampSiteCo();
+    this.firstImageUrl = dto.getFirstImageUrl();
+    this.manageSttus = CampManageStatus.fromLabel(dto.getManageSttus());
+    this.lineIntro = truncate(dto.getIntro(), 500);
+    this.homepage = truncate(dto.getHomepage(), 255);
+    this.sbrsCl = truncate(dto.getSbrsCl(), 500);
+    this.updatedAt = LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul"));
+  }
+
   // 고캠핑 API 원본 데이터가 컬럼 길이 제한을 넘는 경우가 있어 저장 전 자른다 (예: intro가 500자 초과).
   private static String truncate(String value, int maxLength) {
     if (value == null || value.length() <= maxLength) {

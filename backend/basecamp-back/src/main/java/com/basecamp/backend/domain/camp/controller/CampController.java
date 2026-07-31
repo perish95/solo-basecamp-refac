@@ -41,7 +41,8 @@ public class CampController {
   @Operation(
       summary = "고캠핑 API 전체 동기화",
       description =
-          "관리자가 고캠핑 공공데이터 API를 직접 호출해 전체 캠핑장 데이터를 동기화합니다. 비동기로 실행되며, 진행 상황은 /fetch/status 로 조회합니다.")
+          "관리자가 고캠핑 공공데이터 API를 직접 호출해 전체 캠핑장 데이터를 동기화합니다(신규 저장 + 기존 캠핑장 정보 갱신). "
+              + "비동기로 실행되며, 진행 상황은 /fetch/status 로 조회합니다.")
   @PreAuthorize("hasRole('ADMIN')")
   @PostMapping("/fetch")
   public ResponseEntity<String> fetchCamps() {

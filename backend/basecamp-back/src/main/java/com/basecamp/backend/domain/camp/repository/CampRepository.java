@@ -2,6 +2,7 @@ package com.basecamp.backend.domain.camp.repository;
 
 import com.basecamp.backend.domain.camp.entity.Camp;
 import com.basecamp.backend.domain.camp.entity.CampManageStatus;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -62,6 +63,9 @@ public interface CampRepository extends JpaRepository<Camp, Long>, JpaSpecificat
   // 모든 캠핑장의 contentId 리스트 조회
   @Query("SELECT c.contentId FROM Camp c")
   List<Long> findAllContentIds();
+
+  // 고캠핑 API 동기화 시 기존 캠핑장을 페이지 단위로 배치 조회 (upsert의 update 대상 판별용)
+  List<Camp> findAllByContentIdIn(Collection<Long> contentIds);
 
   // 위치 기반 감석 : 경도 , 위도 범위로 캠핑장 찾기
   List<Camp> findByMapXBetweenAndMapYBetween(
