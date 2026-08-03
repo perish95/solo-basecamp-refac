@@ -262,6 +262,7 @@ public class Camp {
         .contentId(dto.getContentId())
         .facltNm(dto.getFacltNm())
         .addr1(dto.getAddr1())
+        .addr2(truncate(dto.getAddr2(), 200))
         .mapX(dto.getMapX() != null ? new BigDecimal(dto.getMapX().toString()) : null)
         .mapY(dto.getMapY() != null ? new BigDecimal(dto.getMapY().toString()) : null)
         .tel(dto.getTel())
@@ -274,6 +275,13 @@ public class Camp {
         .lineIntro(truncate(dto.getIntro(), 500))
         .homepage(truncate(dto.getHomepage(), 255))
         .sbrsCl(truncate(dto.getSbrsCl(), 500))
+        .toiletCo(dto.getToiletCo())
+        .swrmCo(dto.getSwrmCo())
+        .wtrplCo(dto.getWtrplCo())
+        .extshrCo(dto.getExtshrCo())
+        .glampInnerFclty(truncate(dto.getGlampInnerFclty(), 500))
+        .caravInnerFclty(truncate(dto.getCaravInnerFclty(), 500))
+        .operDeCl(truncate(dto.getOperDeCl(), 50))
         .price(price)
         .averageRating(new BigDecimal("0.0"))
         .reservationCount(0)
@@ -292,6 +300,7 @@ public class Camp {
       com.basecamp.backend.domain.camp.dto.request.GocampingApiResponseDto dto) {
     this.facltNm = dto.getFacltNm();
     this.addr1 = dto.getAddr1();
+    this.addr2 = truncate(dto.getAddr2(), 200);
     this.mapX = dto.getMapX() != null ? new BigDecimal(dto.getMapX().toString()) : null;
     this.mapY = dto.getMapY() != null ? new BigDecimal(dto.getMapY().toString()) : null;
     this.tel = dto.getTel();
@@ -304,6 +313,13 @@ public class Camp {
     this.lineIntro = truncate(dto.getIntro(), 500);
     this.homepage = truncate(dto.getHomepage(), 255);
     this.sbrsCl = truncate(dto.getSbrsCl(), 500);
+    this.toiletCo = dto.getToiletCo();
+    this.swrmCo = dto.getSwrmCo();
+    this.wtrplCo = dto.getWtrplCo();
+    this.extshrCo = dto.getExtshrCo();
+    this.glampInnerFclty = truncate(dto.getGlampInnerFclty(), 500);
+    this.caravInnerFclty = truncate(dto.getCaravInnerFclty(), 500);
+    this.operDeCl = truncate(dto.getOperDeCl(), 50);
     this.updatedAt = LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul"));
   }
 
