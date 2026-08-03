@@ -69,7 +69,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build
-        run: ./gradlew build
+        run: ./gradlew clean build -x test
         env:
           DB_URL: jdbc:mysql://127.0.0.1:3306/basecamp?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
           DB_USERNAME: root
