@@ -16,16 +16,23 @@ import com.basecamp.backend.domain.camp.client.kakao.GeoPoint;
 import com.basecamp.backend.domain.camp.client.kakao.KakaoGeocodingClient;
 import com.basecamp.backend.domain.camp.dto.request.CampRegistrationRequest;
 import com.basecamp.backend.domain.camp.dto.request.CampUpdateRequest;
+import com.basecamp.backend.domain.camp.dto.request.GocampingApiResponseDto;
 import com.basecamp.backend.domain.camp.entity.Camp;
 import com.basecamp.backend.domain.camp.repository.CampRepository;
+import com.basecamp.backend.domain.camp.service.CampService.SyncPageResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 /** 캠핑장 등록/수정 시 주소 기반 지오코딩 반영 단위 테스트. */
@@ -45,6 +52,15 @@ class CampServiceTest {
   @Mock private CampTransactionService campTransactionService;
 
   @InjectMocks private CampService campService;
+
+  @BeforeEach
+  void setUpPricePolicy() {
+    // saveCampsFromApi()의 신규 저장 경로가 generateRandomPrice()를 타므로, @Value 필드가 비어있으면
+    // (min=max=unit=0) 0으로 나누기 예외가 난다. @InjectMocks는 @PostConstruct를 실행하지 않는다.
+    ReflectionTestUtils.setField(campService, "defaultPriceMin", 10000);
+    ReflectionTestUtils.setField(campService, "defaultPriceMax", 50000);
+    ReflectionTestUtils.setField(campService, "defaultPriceUnit", 1000);
+  }
 
   private CampRegistrationRequest.CampRegistrationRequestBuilder baseRequest() {
     return CampRegistrationRequest.builder()
@@ -162,5 +178,79 @@ class CampServiceTest {
   private void givenUpdateReturnsEmptyResult() {
     given(campTransactionService.update(any(), any(), any(), any(), any()))
         .willReturn(new CampTransactionService.UpdateResult(Camp.builder().build(), List.of()));
+  }
+
+  // saveCampsFromApi()는 고캠핑 API 응답을 신규 저장/기존 갱신으로 나눈다(upsert).
+  // 기존 갱신은 CampTransactionService.syncExistingCamps 로 위임하고, 실제 필드 갱신 로직(API 소유
+  // 필드만 반영하는지)은 Camp 엔티티 자체의 책임이라 여기서는 "누구에게 무엇을 넘기는지"만 검증한다.
+
+  @Test
+  @DisplayName("saveCampsFromApi_신규캠핑장_저장하고콘텐츠아이디캐시에추가한다")
+  void saveCampsFromApi_신규캠핑장_저장하고캐시에추가한다() {
+    // given: 아직 DB에 없는 contentId 하나
+    GocampingApiResponseDto newDto = gocampingDto(1001L, "새 캠핑장", "https://img/1001.jpg");
+    Set<Long> existingContentIds = new HashSet<>();
+
+    // when
+    SyncPageResult result = campService.saveCampsFromApi(List.of(newDto), existingContentIds);
+
+    // then: 신규 1건 저장, 갱신 대상은 없으니 syncExistingCamps는 빈 리스트로 호출된다
+    assertThat(result.savedCount()).isEqualTo(1);
+    assertThat(result.updatedCount()).isEqualTo(0);
+    verify(campTransactionService).saveAllNewCamps(any());
+    verify(campTransactionService).syncExistingCamps(List.of());
+    // 같은 페이지 반복 호출(다음 페이지) 대비 캐시에 반영됐는지
+    assertThat(existingContentIds).contains(1001L);
+  }
+
+  @Test
+  @DisplayName("saveCampsFromApi_이미존재하는콘텐츠아이디_신규저장없이갱신만위임한다")
+  void saveCampsFromApi_기존캠핑장_갱신만위임한다() {
+    // given: 이미 DB에 있는 contentId
+    GocampingApiResponseDto existingDto = gocampingDto(2002L, "기존 캠핑장", "https://img/2002.jpg");
+    Set<Long> existingContentIds = new HashSet<>(Set.of(2002L));
+    given(campTransactionService.syncExistingCamps(List.of(existingDto))).willReturn(1);
+
+    // when
+    SyncPageResult result = campService.saveCampsFromApi(List.of(existingDto), existingContentIds);
+
+    // then: 신규 저장은 일어나지 않고, 갱신만 위임된다
+    assertThat(result.savedCount()).isEqualTo(0);
+    assertThat(result.updatedCount()).isEqualTo(1);
+    verify(campTransactionService, never()).saveAllNewCamps(any());
+    verify(campTransactionService).syncExistingCamps(List.of(existingDto));
+  }
+
+  @Test
+  @DisplayName("saveCampsFromApi_대표이미지없음_저장도갱신도하지않는다")
+  void saveCampsFromApi_대표이미지없음_아무것도하지않는다() {
+    // given: 대표 이미지가 없는 레코드 — 신규든 기존이든 저장/갱신 대상에서 제외된다
+    GocampingApiResponseDto noImageDto = gocampingDto(3003L, "이미지없는캠핑장", null);
+    Set<Long> existingContentIds = new HashSet<>(Set.of(3003L));
+
+    // when
+    SyncPageResult result = campService.saveCampsFromApi(List.of(noImageDto), existingContentIds);
+
+    // then
+    assertThat(result.savedCount()).isEqualTo(0);
+    assertThat(result.updatedCount()).isEqualTo(0);
+    verify(campTransactionService, never()).saveAllNewCamps(any());
+    verify(campTransactionService).syncExistingCamps(List.of());
+  }
+
+  // GocampingApiResponseDto는 Jackson 역직렬화 전용(@JsonProperty 필드, setter/builder 없음)이라
+  // 테스트에서도 실제 운영 경로와 같은 방식(JSON 역직렬화)으로 만든다.
+  private GocampingApiResponseDto gocampingDto(
+      long contentId, String facltNm, String firstImageUrl) {
+    try {
+      String firstImageUrlJson = firstImageUrl == null ? "null" : "\"" + firstImageUrl + "\"";
+      String json =
+          String.format(
+              "{\"contentId\":%d,\"facltNm\":\"%s\",\"firstImageUrl\":%s}",
+              contentId, facltNm, firstImageUrlJson);
+      return new ObjectMapper().readValue(json, GocampingApiResponseDto.class);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 }

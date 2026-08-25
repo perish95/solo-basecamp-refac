@@ -86,6 +86,9 @@ public class SecurityConfig {
                     // 먼저 매칭된 규칙이 이긴다. 순서를 바꾸면 /my 가 조용히 공개된다(CampControllerSecurityTest 가 잡는다).
                     .requestMatchers(HttpMethod.GET, "/api/v1/camps/my")
                     .authenticated()
+                    // 고캠핑 동기화 상태 조회도 관리자 전용이라 같은 이유로 먼저 인증을 요구한다.
+                    .requestMatchers(HttpMethod.GET, "/api/v1/camps/fetch/status")
+                    .authenticated()
                     // 캠핑장 목록/검색/상세 조회는 비로그인 상태에서도 볼 수 있어야 하므로 공개.
                     .requestMatchers(HttpMethod.GET, "/api/v1/camps/**")
                     .permitAll()

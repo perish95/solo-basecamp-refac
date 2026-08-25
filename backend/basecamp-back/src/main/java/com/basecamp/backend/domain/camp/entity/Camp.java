@@ -262,6 +262,7 @@ public class Camp {
         .contentId(dto.getContentId())
         .facltNm(dto.getFacltNm())
         .addr1(dto.getAddr1())
+        .addr2(truncate(dto.getAddr2(), 200))
         .mapX(dto.getMapX() != null ? new BigDecimal(dto.getMapX().toString()) : null)
         .mapY(dto.getMapY() != null ? new BigDecimal(dto.getMapY().toString()) : null)
         .tel(dto.getTel())
@@ -274,11 +275,52 @@ public class Camp {
         .lineIntro(truncate(dto.getIntro(), 500))
         .homepage(truncate(dto.getHomepage(), 255))
         .sbrsCl(truncate(dto.getSbrsCl(), 500))
+        .toiletCo(dto.getToiletCo())
+        .swrmCo(dto.getSwrmCo())
+        .wtrplCo(dto.getWtrplCo())
+        .extshrCo(dto.getExtshrCo())
+        .glampInnerFclty(truncate(dto.getGlampInnerFclty(), 500))
+        .caravInnerFclty(truncate(dto.getCaravInnerFclty(), 500))
+        .operDeCl(truncate(dto.getOperDeCl(), 50))
         .price(price)
         .averageRating(new BigDecimal("0.0"))
         .reservationCount(0)
         .createdAt(LocalDateTime.now())
         .build();
+  }
+
+  /**
+   * 이미 존재하는 캠핑장(contentId 매칭)에 고캠핑 API 응답을 다시 반영한다.
+   *
+   * <p>API가 실제로 원본을 갖고 있는 필드만 덮어쓴다. {@code price}(API 미제공, 저장 시점에 임의 부여), {@code
+   * averageRating}/{@code reservationCount}(리뷰·예약 도메인이 집계), {@code ownerId}/{@link #images}(사용자
+   * 등록·수정 경로로만 채워짐)는 API 쪽에 대응 값이 없거나 우리 도메인이 소유한 값이라 여기서 손대지 않는다.
+   */
+  public void syncFromGocampingApi(
+      com.basecamp.backend.domain.camp.dto.request.GocampingApiResponseDto dto) {
+    this.facltNm = dto.getFacltNm();
+    this.addr1 = dto.getAddr1();
+    this.addr2 = truncate(dto.getAddr2(), 200);
+    this.mapX = dto.getMapX() != null ? new BigDecimal(dto.getMapX().toString()) : null;
+    this.mapY = dto.getMapY() != null ? new BigDecimal(dto.getMapY().toString()) : null;
+    this.tel = dto.getTel();
+    this.induty = dto.getInduty();
+    this.gnrlSiteCo = dto.getGnrlSiteCo();
+    this.autoSiteCo = dto.getAutoSiteCo();
+    this.glampSiteCo = dto.getGlampSiteCo();
+    this.firstImageUrl = dto.getFirstImageUrl();
+    this.manageSttus = CampManageStatus.fromLabel(dto.getManageSttus());
+    this.lineIntro = truncate(dto.getIntro(), 500);
+    this.homepage = truncate(dto.getHomepage(), 255);
+    this.sbrsCl = truncate(dto.getSbrsCl(), 500);
+    this.toiletCo = dto.getToiletCo();
+    this.swrmCo = dto.getSwrmCo();
+    this.wtrplCo = dto.getWtrplCo();
+    this.extshrCo = dto.getExtshrCo();
+    this.glampInnerFclty = truncate(dto.getGlampInnerFclty(), 500);
+    this.caravInnerFclty = truncate(dto.getCaravInnerFclty(), 500);
+    this.operDeCl = truncate(dto.getOperDeCl(), 50);
+    this.updatedAt = LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul"));
   }
 
   // 고캠핑 API 원본 데이터가 컬럼 길이 제한을 넘는 경우가 있어 저장 전 자른다 (예: intro가 500자 초과).

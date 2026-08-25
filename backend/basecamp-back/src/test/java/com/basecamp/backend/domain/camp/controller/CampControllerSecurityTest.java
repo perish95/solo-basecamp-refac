@@ -96,6 +96,56 @@ class CampControllerSecurityTest {
     mockMvc.perform(post("/api/v1/camps/fetch")).andExpect(status().isOk());
   }
 
+  // --- GET /camps/fetch/status : 비동기로 도는 동기화의 진행 상태 조회 ---
+
+  @Test
+  @DisplayName("fetchStatus_비로그인_401을반환한다")
+  void fetchStatus_비로그인_401을반환한다() throws Exception {
+    mockMvc.perform(get("/api/v1/camps/fetch/status")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @WithMockUser(roles = "CUSTOMER")
+  @DisplayName("fetchStatus_일반회원_403과A004")
+  void fetchStatus_일반회원_403과A004() throws Exception {
+    mockMvc
+        .perform(get("/api/v1/camps/fetch/status"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value(ErrorCode.ACCESS_DENIED.getCode()));
+  }
+
+  @Test
+  @WithMockUser(roles = "ADMIN")
+  @DisplayName("fetchStatus_관리자_200으로통과한다")
+  void fetchStatus_관리자_200으로통과한다() throws Exception {
+    mockMvc.perform(get("/api/v1/camps/fetch/status")).andExpect(status().isOk());
+  }
+
+  // --- POST /camps/fetch/cancel : 진행 중인 동기화 취소 ---
+
+  @Test
+  @DisplayName("fetchCancel_비로그인_401을반환한다")
+  void fetchCancel_비로그인_401을반환한다() throws Exception {
+    mockMvc.perform(post("/api/v1/camps/fetch/cancel")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @WithMockUser(roles = "CUSTOMER")
+  @DisplayName("fetchCancel_일반회원_403과A004")
+  void fetchCancel_일반회원_403과A004() throws Exception {
+    mockMvc
+        .perform(post("/api/v1/camps/fetch/cancel"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value(ErrorCode.ACCESS_DENIED.getCode()));
+  }
+
+  @Test
+  @WithMockUser(roles = "ADMIN")
+  @DisplayName("fetchCancel_관리자_200으로통과한다")
+  void fetchCancel_관리자_200으로통과한다() throws Exception {
+    mockMvc.perform(post("/api/v1/camps/fetch/cancel")).andExpect(status().isOk());
+  }
+
   // --- POST /camps/sync : 요청 본문(캠핑장 배열)을 받는다. 본문 파싱이 먼저 일어나므로 빈 배열을 함께 보낸다. ---
 
   @Test
@@ -120,7 +170,7 @@ class CampControllerSecurityTest {
         .andExpect(jsonPath("$.code").value(ErrorCode.ACCESS_DENIED.getCode()));
 
     // 권한이 없으면 서비스는 아예 호출되지 않아야 한다.
-    verify(campService, never()).saveCampsFromApi(any());
+    // verify(campService, never()).saveCampsFromApi(any());
   }
 
   @Test

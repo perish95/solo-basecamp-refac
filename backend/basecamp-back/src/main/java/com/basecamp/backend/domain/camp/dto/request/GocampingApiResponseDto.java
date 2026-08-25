@@ -28,6 +28,10 @@ public class GocampingApiResponseDto {
   @JsonProperty("addr1")
   private String addr1;
 
+  // 상세 주소
+  @JsonProperty("addr2")
+  private String addr2;
+
   // 경도
   @JsonProperty("mapX")
   private Double mapX;
@@ -76,6 +80,34 @@ public class GocampingApiResponseDto {
   @JsonProperty("sbrsCl")
   private String sbrsCl;
 
+  // 화장실 개수
+  @JsonProperty("toiletCo")
+  private Integer toiletCo;
+
+  // 샤워실 개수
+  @JsonProperty("swrmCo")
+  private Integer swrmCo;
+
+  // 물놀이장 개수
+  @JsonProperty("wtrplCo")
+  private Integer wtrplCo;
+
+  // 소화기 개수
+  @JsonProperty("extshrCo")
+  private Integer extshrCo;
+
+  // 글램핑 내부시설 (콤마 구분 문자열)
+  @JsonProperty("glampInnerFclty")
+  private String glampInnerFclty;
+
+  // 카라반 내부시설 (콤마 구분 문자열)
+  @JsonProperty("caravInnerFclty")
+  private String caravInnerFclty;
+
+  // 운영기간 구분
+  @JsonProperty("operDeCl")
+  private String operDeCl;
+
   // 운영 시작일 (YYYYMMDD)
   @JsonProperty("hvofBgnde")
   private String hvofBgnde;
@@ -94,6 +126,9 @@ public class GocampingApiResponseDto {
         + '\''
         + ", addr1='"
         + addr1
+        + '\''
+        + ", addr2='"
+        + addr2
         + '\''
         + ", mapX="
         + mapX
@@ -125,6 +160,23 @@ public class GocampingApiResponseDto {
         + '\''
         + ", sbrsCl='"
         + sbrsCl
+        + '\''
+        + ", toiletCo="
+        + toiletCo
+        + ", swrmCo="
+        + swrmCo
+        + ", wtrplCo="
+        + wtrplCo
+        + ", extshrCo="
+        + extshrCo
+        + ", glampInnerFclty='"
+        + glampInnerFclty
+        + '\''
+        + ", caravInnerFclty='"
+        + caravInnerFclty
+        + '\''
+        + ", operDeCl='"
+        + operDeCl
         + '\''
         + ", hvofBgnde='"
         + hvofBgnde

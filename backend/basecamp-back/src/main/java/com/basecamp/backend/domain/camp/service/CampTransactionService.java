@@ -5,6 +5,7 @@ import com.basecamp.backend.common.exception.ErrorCode;
 import com.basecamp.backend.common.storage.StoredObject;
 import com.basecamp.backend.domain.camp.client.kakao.GeoPoint;
 import com.basecamp.backend.domain.camp.dto.request.CampUpdateRequest;
+import com.basecamp.backend.domain.camp.dto.request.GocampingApiResponseDto;
 import com.basecamp.backend.domain.camp.entity.Camp;
 import com.basecamp.backend.domain.camp.repository.CampRepository;
 import com.basecamp.backend.domain.reservation.service.ReservationService;
@@ -99,6 +100,34 @@ public class CampTransactionService {
 
     camp.softDelete();
     return objectKeysOf(detached);
+  }
+
+  @Transactional
+  public void saveAllNewCamps(List<Camp> newCamps) {
+    campRepository.saveAll(newCamps);
+  }
+
+  /**
+   * contentId가 이미 존재하는 캠핑장들에 API 원본 필드만 다시 반영한다(Camp.syncFromGocampingApi 참고).
+   *
+   * <p>배치로 조회한 엔티티는 이 트랜잭션의 영속성 컨텍스트에 관리되므로, 필드를 바꿔두기만 하면 커밋 시 더티 체킹으로 반영된다. 값이 API 응답과 이미 같으면
+   * UPDATE 자체가 나가지 않는다.
+   */
+  @Transactional
+  public int syncExistingCamps(List<GocampingApiResponseDto> existingDtos) {
+    if (existingDtos.isEmpty()) {
+      return 0;
+    }
+
+    Map<Long, GocampingApiResponseDto> dtoByContentId =
+        existingDtos.stream()
+            .collect(Collectors.toMap(GocampingApiResponseDto::getContentId, dto -> dto));
+
+    List<Camp> existingCamps = campRepository.findAllByContentIdIn(dtoByContentId.keySet());
+    existingCamps.forEach(
+        camp -> camp.syncFromGocampingApi(dtoByContentId.get(camp.getContentId())));
+
+    return existingCamps.size();
   }
 
   /** 이미지까지 로딩해 소유권을 확인한다. 교체 대상을 인스턴스로 되짚어야 하므로 컬렉션이 초기화돼 있어야 한다. */
