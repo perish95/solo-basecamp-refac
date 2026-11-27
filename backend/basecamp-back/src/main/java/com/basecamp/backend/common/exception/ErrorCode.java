@@ -103,6 +103,13 @@ public enum ErrorCode {
 
   // Notification (알림)
   NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "알림을 찾을 수 없습니다."),
+
+  // AI (LLM 연동)
+  AI_DISABLED(HttpStatus.SERVICE_UNAVAILABLE, "AI001", "AI 기능이 비활성화되어 있습니다."),
+  AI_QUERY_UNSUPPORTED(
+      HttpStatus.UNPROCESSABLE_ENTITY, "AI002", "검색 조건으로 바꿀 수 없는 질문입니다. 다르게 물어봐 주세요."),
+  AI_SQL_REJECTED(HttpStatus.UNPROCESSABLE_ENTITY, "AI003", "질문을 처리하지 못했습니다. 조건을 바꿔 다시 물어봐 주세요."),
+  AI_UPSTREAM_ERROR(HttpStatus.BAD_GATEWAY, "AI004", "AI 서비스 호출에 실패했습니다. 잠시 후 다시 시도해 주세요."),
   ;
 
   private final HttpStatus status;
