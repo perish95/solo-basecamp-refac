@@ -40,9 +40,15 @@ public class AnthropicLlmClient implements LlmClient {
 
   @Override
   public <T> T generateStructured(String systemPrompt, String userMessage, Class<T> outputType) {
+    return generateStructured(properties.getModel(), systemPrompt, userMessage, outputType);
+  }
+
+  @Override
+  public <T> T generateStructured(
+      String model, String systemPrompt, String userMessage, Class<T> outputType) {
     StructuredMessageCreateParams<T> params =
         MessageCreateParams.builder()
-            .model(properties.getModel())
+            .model(model)
             .maxTokens(MAX_TOKENS)
             .system(systemPrompt)
             .addUserMessage(userMessage)
