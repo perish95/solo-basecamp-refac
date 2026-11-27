@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, X } from "lucide-react";
+import { Search, Sparkles, X } from "lucide-react";
 import CampCard from "../../components/common/CampCard";
+import AiCampSearch from "../../components/ai/AiCampSearch";
 import { CAMPS, REGIONS, INDUTY_TYPES } from "../../data/camps";
 import { getCampsites } from "../../api/campsite";
 import type { Camp } from "../../types";
@@ -26,6 +27,7 @@ const SORT_OPTIONS = [
 export default function CampsiteListPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [mode, setMode] = useState<"normal" | "ai">("normal");
 
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [debouncedQuery, setDebouncedQuery] = useState(query);
@@ -117,6 +119,25 @@ export default function CampsiteListPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+      {/* Search mode toggle */}
+      <div className="inline-flex p-1 mb-4 rounded-xl bg-muted">
+        {(["normal", "ai"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm transition-all ${mode === m ? "bg-card text-foreground font-bold shadow-sm" : "text-muted-foreground"
+              }`}
+          >
+            {m === "ai" && <Sparkles size={14} className="text-primary" />}
+            {m === "normal" ? "일반 검색" : "AI 검색"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "ai" ? (
+        <AiCampSearch />
+      ) : (
+      <>
       {/* Search bar */}
       <div className="flex gap-2 mb-6">
         <div className="flex-1 flex items-center gap-3 bg-card border border-border rounded-xl px-4">
@@ -249,6 +270,8 @@ export default function CampsiteListPage() {
         <p className="text-center text-xs text-muted-foreground py-6">
           모든 캠핑장을 불러왔습니다 ({totalCount.toLocaleString()}개)
         </p>
+      )}
+      </>
       )}
     </div>
   );
