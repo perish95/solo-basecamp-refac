@@ -21,6 +21,7 @@ import {
   Check,
 } from "lucide-react";
 import StarRow from "../../components/common/StarRow";
+import ReviewSummaryCard from "../../components/ai/ReviewSummaryCard";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -653,6 +654,11 @@ export default function CampsiteDetailPage() {
                 <Plus size={14} /> 후기 작성
               </button>
             </div>
+
+            {/* AI review summary */}
+            {campId != null && (
+              <ReviewSummaryCard campId={campId} refreshKey={campReviews.length} />
+            )}
 
             {/* Review form */}
             {showForm && user && (
