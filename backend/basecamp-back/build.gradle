@@ -28,6 +28,8 @@ ext {
 	set('jjwtVersion', '0.12.6')
 	set('springdocVersion', '2.6.0')
 	set('minioVersion', '8.5.17')
+	set('anthropicVersion', '3.3.0')
+	set('jsqlparserVersion', '5.3')
 }
 
 // 코드 포맷은 논쟁 대상이 아니라 도구가 정한다.
@@ -73,6 +75,11 @@ dependencies {
 
 	// 오브젝트 스토리지 (MinIO). 프로필/게시글/리뷰/캠핑장 이미지 저장소.
 	implementation "io.minio:minio:${minioVersion}"
+
+	// LLM 연동 (Claude API). 자연어 캠핑장 검색(NL2SQL)에 사용.
+	implementation "com.anthropic:anthropic-java:${anthropicVersion}"
+	// LLM 이 생성한 SQL 을 실행 전에 파싱해 허용 목록을 검증한다.
+	implementation "com.github.jsqlparser:jsqlparser:${jsqlparserVersion}"
 
 	// Lombok
 	compileOnly 'org.projectlombok:lombok'
