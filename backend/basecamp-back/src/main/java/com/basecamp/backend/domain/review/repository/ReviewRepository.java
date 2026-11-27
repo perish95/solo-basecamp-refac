@@ -53,4 +53,18 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
   // 예약 목록에 hasReview를 채우기 위해, 주어진 예약 id들 중 이미 리뷰가 달린 것만 골라낸다.
   @Query("select rv.reservation.id from Review rv where rv.reservation.id in :reservationIds")
   List<Long> findReservationIdsWithReview(@Param("reservationIds") List<Long> reservationIds);
+
+  // 리뷰 AI 요약의 최신 여부 판별용: 캠핑장 리뷰 수와 마지막 작성/수정 시각을 한 번에 집계한다.
+  // 리뷰를 추가·수정·삭제하면 둘 중 하나가 반드시 바뀌므로, 저장된 요약의 지문과 비교해 재생성 여부를 정한다.
+  @Query(
+      """
+            select new com.basecamp.backend.domain.review.repository.ReviewStats(
+                count(rv), max(coalesce(rv.updatedAt, rv.createdAt)))
+            from Review rv
+            where rv.camp.campId = :campId
+            """)
+  ReviewStats findStatsByCampId(@Param("campId") Long campId);
+
+  // 리뷰 AI 요약 입력용: 캠핑장의 최근 리뷰 100건 (본문·평점만 쓰므로 연관 엔티티는 로딩하지 않는다).
+  List<Review> findTop100ByCamp_CampIdOrderByCreatedAtDescReviewIdDesc(Long campId);
 }

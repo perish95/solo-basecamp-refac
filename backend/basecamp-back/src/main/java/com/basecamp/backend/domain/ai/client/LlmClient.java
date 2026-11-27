@@ -17,4 +17,8 @@ public interface LlmClient {
    *     거절함 / AI_UPSTREAM_ERROR — API 호출 실패나 응답 잘림
    */
   <T> T generateStructured(String systemPrompt, String userMessage, Class<T> outputType);
+
+  /** {@link #generateStructured(String, String, Class)} 와 같고, 모델만 지정한다(ai.model 대신). */
+  <T> T generateStructured(
+      String model, String systemPrompt, String userMessage, Class<T> outputType);
 }

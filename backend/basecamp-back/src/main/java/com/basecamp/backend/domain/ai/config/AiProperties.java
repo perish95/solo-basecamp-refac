@@ -20,10 +20,18 @@ public class AiProperties {
   /** 사용할 Claude 모델 ID. */
   private String model = "claude-opus-5-5";
 
+  /** 리뷰 요약에 쓸 모델 ID. 비어 있으면 {@link #model} 을 쓴다. */
+  private String summaryModel;
+
   /** Claude API 호출 타임아웃(초). */
   private int timeoutSeconds = 30;
 
   private Datasource datasource = new Datasource();
+
+  /** 리뷰 요약에 실제로 쓸 모델 ID. */
+  public String resolveSummaryModel() {
+    return summaryModel == null || summaryModel.isBlank() ? model : summaryModel;
+  }
 
   private Sql sql = new Sql();
 
