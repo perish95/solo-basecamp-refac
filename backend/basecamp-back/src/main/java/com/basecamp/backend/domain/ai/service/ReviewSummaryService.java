@@ -125,12 +125,13 @@ public class ReviewSummaryService {
     return Optional.empty();
   }
 
+  /** 리뷰 본문은 개인정보를 가리고 태그 문자를 무력화해 넣는다. 다른 후기나 지시문을 흉내 내지 못하게 한다. */
   private static String toReviewsBlock(List<ReviewInput> reviews) {
     return reviews.stream()
         .map(
             r ->
                 "<review id=\"%d\" rating=\"%s\">\n%s\n</review>"
-                    .formatted(r.reviewId(), r.rating(), r.content()))
+                    .formatted(r.reviewId(), r.rating(), AiTextGuard.sanitizeInput(r.content())))
         .collect(Collectors.joining("\n", "<reviews>\n", "\n</reviews>"));
   }
 }

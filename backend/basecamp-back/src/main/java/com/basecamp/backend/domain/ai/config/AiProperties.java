@@ -35,6 +35,8 @@ public class AiProperties {
 
   private Sql sql = new Sql();
 
+  private SearchRateLimit searchRateLimit = new SearchRateLimit();
+
   /** LLM 이 생성한 SQL 을 실행할 읽기 전용 계정. username 이 비어 있으면 spring.datasource 계정을 쓴다. */
   @Getter
   @Setter
@@ -53,5 +55,13 @@ public class AiProperties {
 
     /** 쿼리 타임아웃(초). */
     private int queryTimeoutSeconds = 3;
+  }
+
+  /** AI 검색 사용자별 호출 제한. windowMinutes 동안 maxRequests 번까지 허용한다. */
+  @Getter
+  @Setter
+  public static class SearchRateLimit {
+    private int maxRequests = 20;
+    private int windowMinutes = 60;
   }
 }

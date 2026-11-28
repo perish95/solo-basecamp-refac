@@ -163,6 +163,44 @@ class ReviewSummaryGroundingValidatorTest {
   }
 
   @Test
+  void validate_요약길이초과_무효() {
+    ReviewSummaryGeneration gen =
+        generation("가".repeat(301), List.of(), List.of(), Sentiment.MIXED);
+
+    assertThatThrownBy(() -> validator.validate(gen, reviews(5, "3.0")))
+        .isInstanceOf(UngroundedSummaryException.class);
+  }
+
+  @Test
+  void validate_요약에이메일_무효() {
+    ReviewSummaryGeneration gen =
+        generation("문의는 camp@example.com 으로 하래요.", List.of(), List.of(), Sentiment.MIXED);
+
+    assertThatThrownBy(() -> validator.validate(gen, reviews(5, "3.0")))
+        .isInstanceOf(UngroundedSummaryException.class);
+  }
+
+  @Test
+  void validate_긴항목과개인정보항목_제거() {
+    // given
+    ReviewSummaryGeneration gen =
+        generation(
+            "요약입니다.",
+            List.of(
+                new Item("가".repeat(41), List.of(1L, 2L)),
+                new Item("사장님 메일 owner@camp.kr", List.of(1L, 2L)),
+                new Item("친절함", List.of(1L, 2L))),
+            List.of(),
+            Sentiment.MIXED);
+
+    // when
+    GroundedSummary result = validator.validate(gen, reviews(5, "3.0"));
+
+    // then
+    assertThat(result.pros()).containsExactly("친절함");
+  }
+
+  @Test
   void validate_분위기누락_무효() {
     ReviewSummaryGeneration gen = generation("요약입니다.", List.of(), List.of(), null);
 

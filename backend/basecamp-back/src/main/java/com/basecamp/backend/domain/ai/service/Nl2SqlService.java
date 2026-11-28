@@ -33,8 +33,14 @@ import org.springframework.util.StringUtils;
 @Service
 public class Nl2SqlService {
 
+  /** explanation 이 가드레일을 통과하지 못했을 때 대신 보여줄 문구. */
+  static final String FALLBACK_EXPLANATION = "질문을 검색 조건으로 바꿔 찾았어요.";
+
+  private static final int MAX_MESSAGE_LENGTH = 200;
+
   private final AiProperties properties;
   private final ObjectProvider<LlmClient> llmClient;
+  private final AiRateLimiter rateLimiter;
   private final SqlValidator sqlValidator;
   private final AiReadOnlyQueryExecutor queryExecutor;
   private final CampRepository campRepository;
@@ -43,12 +49,14 @@ public class Nl2SqlService {
   public Nl2SqlService(
       AiProperties properties,
       ObjectProvider<LlmClient> llmClient,
+      AiRateLimiter rateLimiter,
       SqlValidator sqlValidator,
       AiReadOnlyQueryExecutor queryExecutor,
       CampRepository campRepository,
       PlatformTransactionManager transactionManager) {
     this.properties = properties;
     this.llmClient = llmClient;
+    this.rateLimiter = rateLimiter;
     this.sqlValidator = sqlValidator;
     this.queryExecutor = queryExecutor;
     this.campRepository = campRepository;
@@ -56,27 +64,30 @@ public class Nl2SqlService {
     this.readOnlyTx.setReadOnly(true);
   }
 
-  public AiSearchResponse search(String query) {
+  public AiSearchResponse search(Long userId, String query) {
     LlmClient client = llmClient.getIfAvailable();
     if (!properties.isEnabled() || client == null) {
       throw new BusinessException(ErrorCode.AI_DISABLED);
     }
+    rateLimiter.acquire(userId);
 
-    // 사용자 입력은 태그로 감싸 지시문과 구분한다(프롬프트 인젝션 완화). 실제 방어는 검증기와 DB 권한이 맡는다.
+    // 개인정보를 가리고 태그 문자를 무력화한 뒤 태그로 감싸 지시문과 구분한다(프롬프트 인젝션 완화).
+    // 실제 방어는 검증기와 DB 권한이 맡는다. 로그에도 가린 질문만 남긴다.
+    String question = AiTextGuard.sanitizeInput(query);
     SqlGeneration generation =
         client.generateStructured(
-            Nl2SqlPrompt.SYSTEM, "<question>\n" + query + "\n</question>", SqlGeneration.class);
+            Nl2SqlPrompt.SYSTEM, "<question>\n" + question + "\n</question>", SqlGeneration.class);
 
     if (generation.unsupported()) {
-      log.info("[NL2SQL] 표현 불가 질의: query={}, reason={}", query, generation.reason());
+      log.info("[NL2SQL] 표현 불가 질의: query={}, reason={}", question, generation.reason());
       String reason = generation.reason();
-      throw StringUtils.hasText(reason)
+      throw isSafeMessage(reason)
           ? new BusinessException(ErrorCode.AI_QUERY_UNSUPPORTED, reason)
           : new BusinessException(ErrorCode.AI_QUERY_UNSUPPORTED);
     }
 
     String sql = sqlValidator.validate(generation.sql());
-    log.info("[NL2SQL] query={}, sql={}", query, sql);
+    log.info("[NL2SQL] query={}, sql={}", question, sql);
 
     List<Long> campIds;
     try {
@@ -87,7 +98,21 @@ public class Nl2SqlService {
       throw new BusinessException(ErrorCode.AI_SQL_REJECTED);
     }
 
-    return new AiSearchResponse(loadCampsInOrder(campIds), generation.explanation());
+    String explanation = generation.explanation();
+    if (!isSafeMessage(explanation)) {
+      log.warn("[NL2SQL] explanation 가드레일 실패, 기본 문구로 대체: {}", explanation);
+      explanation = FALLBACK_EXPLANATION;
+    }
+    return new AiSearchResponse(loadCampsInOrder(campIds), explanation);
+  }
+
+  /**
+   * 모델이 쓴 문장(reason, explanation)은 사용자 화면에 그대로 나간다. 질문에 심은 지시로 엉뚱한 안내문을 띄우지 못하게 길이와 개인정보 패턴을 확인한다.
+   */
+  private static boolean isSafeMessage(String text) {
+    return StringUtils.hasText(text)
+        && text.length() <= MAX_MESSAGE_LENGTH
+        && !AiTextGuard.containsPii(text);
   }
 
   /** findAllById 는 순서를 보장하지 않으므로 SQL 결과(정렬) 순서대로 다시 맞춘다. */
