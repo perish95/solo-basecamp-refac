@@ -186,6 +186,10 @@ ai:
   sql:
     max-rows: 50
     query-timeout-seconds: 3
+  # AI 검색 사용자별 호출 제한 (서버 메모리 기준, 인스턴스별). window-minutes 동안 max-requests 번까지 허용. 넘으면 429(AI005)
+  search-rate-limit:
+    max-requests: ${AI_SEARCH_MAX_REQUESTS:20}
+    window-minutes: ${AI_SEARCH_WINDOW_MINUTES:60}
 
 # OpenWeatherMap API — 좌표 기반 현재 날씨/예보 조회
 openweather:
